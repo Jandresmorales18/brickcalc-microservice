@@ -252,7 +252,6 @@ function eliminarVano(id) {
 // ==================== CÁLCULO PRINCIPAL ====================
 
 async function calcular() {
-
     limpiarErrores();
 
     const resultadoDiv = document.getElementById('resultado');
@@ -273,31 +272,31 @@ async function calcular() {
     const altoLadrillo = parseFloat(document.getElementById('altoLadrillo').value);
     const junta = parseFloat(document.getElementById('junta').value);
     const unidadLadrillo = document.getElementById('unidadLadrillo').value;
+    const unidadJunta = document.getElementById('unidadJunta').value;
 
     // Vanos
     let vanos = [];
 
     document.querySelectorAll('.vano').forEach(vano => {
+        const anchoInput = vano.querySelector('input[id^="anchoVano"]');
+        const altoInput = vano.querySelector('input[id^="altoVano"]');
+        
+        if (anchoInput && altoInput) {
+            const ancho = parseFloat(anchoInput.value);
+            const alto = parseFloat(altoInput.value);
 
-        const ancho = parseFloat(
-            vano.querySelector('input[id^="anchoVano"]').value
-        );
-
-        const alto = parseFloat(
-            vano.querySelector('input[id^="altoVano"]').value
-        );
-
-        if (!isNaN(ancho) && !isNaN(alto)) {
-
-            vanos.push({
-                ancho,
-                alto
-            });
+            if (!isNaN(ancho) && !isNaN(alto) && ancho > 0 && alto > 0) {
+                const unidadVano = vano.querySelector('select[id^="unidadVano"]').value;
+                vanos.push({
+                    ancho: ancho,
+                    alto: alto,
+                    unidad: unidadVano
+                });
+            }
         }
     });
 
     try {
-
         const response = await fetch(
             'https://brickcalc-microservice.onrender.com/calcular',
             {
@@ -313,10 +312,15 @@ async function calcular() {
                     largoLadrillo,
                     altoLadrillo,
                     junta,
-                    unidadLadrillo
+                    unidadLadrillo,
+                    unidadJunta
                 })
             }
         );
+
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
 
         const datos = await response.json();
 
@@ -331,94 +335,17 @@ async function calcular() {
             areaPared: parseFloat(datos.areaPared),
             areaVanos: parseFloat(datos.areaVanos),
             areaNeta: parseFloat(datos.areaNeta),
-            volumenMortero: 0,
+            volumenMortero: datos.volumenMortero || 0,
             vanos: vanos.length,
             formaPared: "regular"
         });
 
     } catch (error) {
-
-        console.error(error);
-
+        console.error('Error:', error);
         mostrarErrorGeneral(
-            '❌ Error conectando con el servidor backend'
+            '❌ Error conectando con el servidor backend. Por favor, intenta más tarde.'
         );
     }
-}
-    // Limpiar errores ANTES de validar
-    limpiarErrores();
-    
-    // Ocultar resultado anterior
-    const resultadoDiv = document.getElementById('resultado');
-    resultadoDiv.style.display = 'none';
-    
-    if (!validarTodosLosCampos()) {
-        mostrarErrorGeneral('Por favor, corrija los errores marcados antes de continuar.');
-        return;
-    }
-    
-    let largoPared = parseFloat(document.getElementById('largoPared').value);
-    let altoPared = parseFloat(document.getElementById('altoPared').value);
-    const unidadPared = document.getElementById('unidadPared').value;
-    
-    let largoLadrillo = parseFloat(document.getElementById('largoLadrillo').value);
-    let altoLadrillo = parseFloat(document.getElementById('altoLadrillo').value);
-    let junta = parseFloat(document.getElementById('junta').value);
-    const unidadLadrillo = document.getElementById('unidadLadrillo').value;
-    const unidadJunta = document.getElementById('unidadJunta').value;
-    
-    largoPared = convertirAMetros(largoPared, unidadPared);
-    altoPared = convertirAMetros(altoPared, unidadPared);
-    largoLadrillo = convertirAMetros(largoLadrillo, unidadLadrillo);
-    altoLadrillo = convertirAMetros(altoLadrillo, unidadLadrillo);
-    junta = convertirAMetros(junta, unidadJunta, 'junta');
-    
-    const areaPared = largoPared * altoPared;
-    
-    let areaVanos = 0;
-    const vanos = document.querySelectorAll('.vano');
-    
-    vanos.forEach((vano) => {
-        let anchoVano = parseFloat(vano.querySelector(`input[id^="anchoVano"]`).value);
-        let altoVano = parseFloat(vano.querySelector(`input[id^="altoVano"]`).value);
-        const unidadVano = vano.querySelector(`select[id^="unidadVano"]`).value;
-        
-        if (!isNaN(anchoVano) && !isNaN(altoVano)) {
-            anchoVano = convertirAMetros(anchoVano, unidadVano);
-            altoVano = convertirAMetros(altoVano, unidadVano);
-            areaVanos += anchoVano * altoVano;
-        }
-    });
-    
-    const areaNeta = areaPared - areaVanos;
-    const areaLadrillo = (largoLadrillo + junta) * (altoLadrillo + junta);
-    const cantidadBase = Math.ceil(areaNeta / areaLadrillo);
-    
-    const proporcion = largoPared / altoPared;
-    const formaPared = (proporcion > 2 || proporcion < 0.5) ? "irregular" : "regular";
-    
-    const recomendacion = recomendarMargen(cantidadBase, areaPared, vanos.length, formaPared);
-    
-    const margen5 = Math.ceil(cantidadBase * 1.05);
-    const margen10 = Math.ceil(cantidadBase * 1.10);
-    const cantidadRecomendada = Math.ceil(cantidadBase * (1 + recomendacion.porcentaje / 100));
-    const volumenMortero = areaNeta * 0.02;
-    
-    mostrarResultados({
-        cantidadBase: cantidadBase,
-        cantidad5: margen5,
-        cantidad10: margen10,
-        cantidadRecomendada: cantidadRecomendada,
-        porcentajeRecomendado: recomendacion.porcentaje,
-        razonRecomendacion: recomendacion.razon,
-        explicacionRecomendacion: recomendacion.explicacion,
-        areaPared: areaPared,
-        areaVanos: areaVanos,
-        areaNeta: areaNeta,
-        volumenMortero: volumenMortero,
-        vanos: vanos.length,
-        formaPared: formaPared
-    });
 }
 
 function mostrarResultados(datos) {
@@ -661,7 +588,9 @@ function aplicarMedidas() {
     }
     
     const modal = bootstrap.Modal.getInstance(document.getElementById('cameraModal'));
-    modal.hide();
+    if (modal) {
+        modal.hide();
+    }
     
     if (stream) {
         stream.getTracks().forEach(track => track.stop());
