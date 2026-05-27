@@ -2,15 +2,20 @@ const express = require('express');
 const cors = require('cors');
 
 const app = express();
+
+// Puerto dinámico para Render
 const PORT = process.env.PORT || 3000;
 
+// Middlewares
 app.use(cors());
 app.use(express.json());
+
+// ==================== FUNCIONES ====================
 
 // Convertir unidades a metros
 function convertirAMetros(valor, unidad) {
 
-    switch(unidad) {
+    switch (unidad) {
 
         case 'm':
             return valor;
@@ -26,7 +31,15 @@ function convertirAMetros(valor, unidad) {
     }
 }
 
-// Ruta principal
+// ==================== RUTA PRINCIPAL ====================
+
+// Ruta de prueba
+app.get('/', (req, res) => {
+
+    res.send('🚀 Backend BrickCalc funcionando correctamente');
+});
+
+// Ruta cálculo
 app.post('/calcular', (req, res) => {
 
     try {
@@ -42,15 +55,17 @@ app.post('/calcular', (req, res) => {
             unidadLadrillo
         } = req.body;
 
-        // Área pared
+        // ==================== ÁREA PARED ====================
+
         const areaPared =
             convertirAMetros(largoPared, unidadPared) *
             convertirAMetros(altoPared, unidadPared);
 
-        // Área vanos
+        // ==================== ÁREA VANOS ====================
+
         let areaVanos = 0;
 
-        if(vanos && vanos.length > 0) {
+        if (vanos && vanos.length > 0) {
 
             vanos.forEach(vano => {
 
@@ -60,43 +75,55 @@ app.post('/calcular', (req, res) => {
             });
         }
 
-        // Área neta
+        // ==================== ÁREA NETA ====================
+
         const areaNeta = areaPared - areaVanos;
 
-        // Conversión ladrillo
+        // ==================== CONVERSIÓN LADRILLO ====================
+
         const L = convertirAMetros(largoLadrillo, unidadLadrillo);
         const H = convertirAMetros(altoLadrillo, unidadLadrillo);
         const J = convertirAMetros(junta, unidadLadrillo);
 
-        // Ladrillos por m²
+        // ==================== CÁLCULO ====================
+
         const ladrillosPorM2 = 1 / ((L + J) * (H + J));
 
-        // Totales
         const totalLadrillos = areaNeta * ladrillosPorM2;
+
         const totalConMargen = totalLadrillos * 1.05;
 
-        // Respuesta
+        // ==================== RESPUESTA ====================
+
         res.json({
 
             areaPared: areaPared.toFixed(2),
+
             areaVanos: areaVanos.toFixed(2),
+
             areaNeta: areaNeta.toFixed(2),
+
             ladrillosPorM2: ladrillosPorM2.toFixed(2),
+
             totalLadrillos: Math.ceil(totalLadrillos),
+
             totalConMargen: Math.ceil(totalConMargen)
         });
 
-    } catch(error) {
+    } catch (error) {
 
         res.status(500).json({
+
             mensaje: 'Error en cálculo',
+
             error: error.message
         });
     }
 });
 
-// Iniciar servidor
+// ==================== INICIAR SERVIDOR ====================
+
 app.listen(PORT, () => {
 
-    console.log(`Servidor ejecutándose en puerto ${PORT}`);
+    console.log(`🚀 Servidor ejecutándose en puerto ${PORT}`);
 });
