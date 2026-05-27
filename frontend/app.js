@@ -251,7 +251,100 @@ function eliminarVano(id) {
 
 // ==================== CÁLCULO PRINCIPAL ====================
 
-function calcular() {
+async function calcular() {
+
+    limpiarErrores();
+
+    const resultadoDiv = document.getElementById('resultado');
+    resultadoDiv.style.display = 'none';
+
+    if (!validarTodosLosCampos()) {
+        mostrarErrorGeneral('Por favor, corrija los errores marcados antes de continuar.');
+        return;
+    }
+
+    // Datos pared
+    const largoPared = parseFloat(document.getElementById('largoPared').value);
+    const altoPared = parseFloat(document.getElementById('altoPared').value);
+    const unidadPared = document.getElementById('unidadPared').value;
+
+    // Datos ladrillo
+    const largoLadrillo = parseFloat(document.getElementById('largoLadrillo').value);
+    const altoLadrillo = parseFloat(document.getElementById('altoLadrillo').value);
+    const junta = parseFloat(document.getElementById('junta').value);
+    const unidadLadrillo = document.getElementById('unidadLadrillo').value;
+
+    // Vanos
+    let vanos = [];
+
+    document.querySelectorAll('.vano').forEach(vano => {
+
+        const ancho = parseFloat(
+            vano.querySelector('input[id^="anchoVano"]').value
+        );
+
+        const alto = parseFloat(
+            vano.querySelector('input[id^="altoVano"]').value
+        );
+
+        if (!isNaN(ancho) && !isNaN(alto)) {
+
+            vanos.push({
+                ancho,
+                alto
+            });
+        }
+    });
+
+    try {
+
+        const response = await fetch(
+            'https://brickcalc-microservice.onrender.com/calcular',
+            {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    largoPared,
+                    altoPared,
+                    unidadPared,
+                    vanos,
+                    largoLadrillo,
+                    altoLadrillo,
+                    junta,
+                    unidadLadrillo
+                })
+            }
+        );
+
+        const datos = await response.json();
+
+        mostrarResultados({
+            cantidadBase: datos.totalLadrillos,
+            cantidad5: datos.totalConMargen,
+            cantidad10: Math.ceil(datos.totalLadrillos * 1.10),
+            cantidadRecomendada: datos.totalConMargen,
+            porcentajeRecomendado: 5,
+            razonRecomendacion: "✅ Recomendación automática",
+            explicacionRecomendacion: "Cálculo realizado desde el microservicio backend.",
+            areaPared: parseFloat(datos.areaPared),
+            areaVanos: parseFloat(datos.areaVanos),
+            areaNeta: parseFloat(datos.areaNeta),
+            volumenMortero: 0,
+            vanos: vanos.length,
+            formaPared: "regular"
+        });
+
+    } catch (error) {
+
+        console.error(error);
+
+        mostrarErrorGeneral(
+            '❌ Error conectando con el servidor backend'
+        );
+    }
+}
     // Limpiar errores ANTES de validar
     limpiarErrores();
     
