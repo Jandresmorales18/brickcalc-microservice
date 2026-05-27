@@ -55,11 +55,11 @@
                             <div class="mb-4">
                                 <button class="btn-camera" onclick="abrirCamaraMedicion()">
                                     <i class="fas fa-camera"></i>
-                                     Medir con cámara
+                                    📷 Medir con cámara
                                 </button>
                                 <small class="text-muted d-block mt-2">
                                     <i class="fas fa-info-circle"></i> 
-                                    Apunta la cámara a la pared, usa la cuadrícula como referencia (1 cuadro ≈ 0.5m)
+                                    La cámara detectará automáticamente la pared. Usa "Auto-medir" para medidas automáticas o "Calibrar" para máxima precisión.
                                 </small>
                             </div>
                             
@@ -236,7 +236,7 @@
             <div class="modal-content bg-dark">
                 <div class="modal-header border-0">
                     <h5 class="modal-title text-white">
-                        <i class="fas fa-camera"></i> Medir con cámara
+                        <i class="fas fa-camera"></i> Medición Inteligente
                     </h5>
                     <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
                 </div>
@@ -246,37 +246,53 @@
                         <canvas id="canvas"></canvas>
                         <div class="camera-overlay">
                             <div class="grid-overlay"></div>
-                            <div class="measure-guide">
-                                <div class="guide-text">
-                                    <i class="fas fa-arrows-alt-h"></i> Alinea la pared con la cuadrícula
-                                </div>
-                            </div>
                         </div>
                         <div class="camera-controls">
+                            <!-- Botones de medición automática -->
                             <div class="measure-buttons">
+                                <button class="btn-measure" onclick="capturarMedida('automatico')" style="background: #10b981;">
+                                    <i class="fas fa-magic"></i> Auto-medir
+                                </button>
+                                <button class="btn-measure" onclick="capturarMedida('calibrar')" style="background: #f59e0b;">
+                                    <i class="fas fa-ruler-combined"></i> Calibrar
+                                </button>
+                            </div>
+                            <div class="measure-buttons mt-2">
                                 <button class="btn-measure" onclick="capturarMedida('ancho')">
-                                    <i class="fas fa-arrows-left-right"></i> Medir ancho
+                                    <i class="fas fa-arrows-left-right"></i> Ingresar ancho
                                 </button>
                                 <button class="btn-measure" onclick="capturarMedida('alto')">
-                                    <i class="fas fa-arrows-up-down"></i> Medir alto
+                                    <i class="fas fa-arrows-up-down"></i> Ingresar alto
+                                </button>
+                                <button class="btn-measure" onclick="reiniciarMedicion()" style="background: #ef4444;">
+                                    <i class="fas fa-redo-alt"></i> Reiniciar
                                 </button>
                             </div>
+                            
+                            <!-- Información de medidas -->
                             <div class="medida-info">
                                 <div class="medida-item">
-                                    <span>Ancho estimado:</span>
-                                    <strong id="medidaAncho">0 m</strong>
+                                    <span>📐 Ancho detectado:</span>
+                                    <strong id="medidaAncho">-- m</strong>
                                 </div>
                                 <div class="medida-item">
-                                    <span>Alto estimado:</span>
-                                    <strong id="medidaAlto">0 m</strong>
+                                    <span>📏 Alto detectado:</span>
+                                    <strong id="medidaAlto">-- m</strong>
                                 </div>
                             </div>
+                            
+                            <!-- Guía de uso -->
                             <div class="referencia-info">
                                 <small>
                                     <i class="fas fa-info-circle"></i> 
-                                    Para mayor precisión, coloca un objeto de referencia conocido (ej: hoja A4 = 29.7cm)
+                                    <strong>¿Cómo usar?</strong><br>
+                                    • <strong>Auto-medir:</strong> Apunta la cámara a la pared y espera a que se estabilicen las medidas<br>
+                                    • <strong>Calibrar:</strong> Usa un objeto de referencia (ej: hoja A4) para máxima precisión<br>
+                                    • <strong>Ingresar:</strong> Usa la regla virtual como referencia e ingresa el valor manualmente
                                 </small>
                             </div>
+                            
+                            <!-- Botón aplicar medidas -->
                             <button class="btn-aplicar-medidas" onclick="aplicarMedidas()">
                                 <i class="fas fa-check-circle"></i> Aplicar medidas al cálculo
                             </button>

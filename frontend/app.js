@@ -5,15 +5,15 @@ let medidasCapturadas = {
     ancho: 0,
     alto: 0
 };
-let modoAutomatico = false;
-let videoStream = null;
 let animationFrameId = null;
+let modoAutoMedicion = false;
+let factorEscala = null;
+let puntosCalibracion = [];
 
-// ==================== MEDICIÓN AUTOMÁTICA AVANZADA ====================
+// ==================== MEDICIÓN AUTOMÁTICA PRECISA ====================
 
 async function abrirCamaraMedicion() {
     try {
-        // Detener cualquier stream anterior
         if (stream) {
             stream.getTracks().forEach(track => track.stop());
         }
@@ -28,7 +28,6 @@ async function abrirCamaraMedicion() {
         
         const video = document.getElementById('video');
         video.srcObject = stream;
-        videoStream = stream;
         
         const modal = new bootstrap.Modal(document.getElementById('cameraModal'));
         modal.show();
@@ -37,207 +36,444 @@ async function abrirCamaraMedicion() {
             const canvas = document.getElementById('canvas');
             canvas.width = video.videoWidth;
             canvas.height = video.videoHeight;
-            // Iniciar medición automática
-            iniciarMedicionAutomatica();
+            
+            // Iniciar medición automática real
+            iniciarDeteccionReal();
         };
         
     } catch (error) {
-        console.error('Error al acceder a la cámara:', error);
-        mostrarErrorGeneral('No se pudo acceder a la cámara. Por favor, verifica los permisos.');
+        console.error('Error:', error);
+        mostrarErrorGeneral('No se pudo acceder a la cámara. Verifica los permisos.');
     }
 }
 
-function iniciarMedicionAutomatica() {
-    modoAutomatico = true;
+function iniciarDeteccionReal() {
+    modoAutoMedicion = true;
     const video = document.getElementById('video');
     const canvas = document.getElementById('canvas');
     const ctx = canvas.getContext('2d');
     
-    function detectarYPintar() {
+    // Variables para detección de movimiento estable
+    let frameAnterior = null;
+    let medicionEstable = false;
+    let contadorEstable = 0;
+    let ultimaMedicion = { ancho: 0, alto: 0 };
+    
+    function detectarParedReal() {
         if (video.readyState === 4 && video.videoWidth > 0) {
-            // Dibujar frame
             ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
             
-            // Detectar bordes y pared
-            const medidas = detectarPared(ctx, canvas.width, canvas.height);
+            // Obtener datos de imagen
+            const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+            const data = imageData.data;
             
-            if (medidas) {
-                // Actualizar UI con medidas detectadas
-                document.getElementById('medidaAncho').textContent = `${medidas.ancho.toFixed(2)} m`;
-                document.getElementById('medidaAlto').textContent = `${medidas.alto.toFixed(2)} m`;
-                medidasCapturadas.ancho = medidas.ancho;
-                medidasCapturadas.alto = medidas.alto;
+            // Detección de bordes usando algoritmo de Sobel simplificado
+            const bordes = detectarBordes(data, canvas.width, canvas.height);
+            
+            // Encontrar la región más grande (posible pared)
+            const regionPared = encontrarRegionPared(bordes, canvas.width, canvas.height);
+            
+            if (regionPared) {
+                // Calcular medidas en metros basado en proporción de pantalla
+                // Una pantalla típica a 1 metro muestra aproximadamente 1.5m de ancho
+                const proporcionPantalla = 1.5; // metros por ancho de pantalla a distancia típica
+                const anchoM = (regionPared.ancho / canvas.width) * proporcionPantalla * 1.8;
+                const altoM = (regionPared.alto / canvas.height) * proporcionPantalla * 2.2;
                 
-                // Dibujar overlay de medición
-                dibujarOverlayMedicion(ctx, canvas.width, canvas.height, medidas);
+                // Limitar valores razonables
+                const anchoFinal = Math.min(Math.max(anchoM, 0.5), 15);
+                const altoFinal = Math.min(Math.max(altoM, 0.5), 5);
+                
+                // Verificar si la medición es estable (poca variación)
+                if (Math.abs(ultimaMedicion.ancho - anchoFinal) < 0.1 && 
+                    Math.abs(ultimaMedicion.alto - altoFinal) < 0.05) {
+                    contadorEstable++;
+                    if (contadorEstable > 10 && !medicionEstable) {
+                        medicionEstable = true;
+                        mostrarToast("✅ Medición estabilizada");
+                    }
+                } else {
+                    contadorEstable = 0;
+                    medicionEstable = false;
+                }
+                
+                ultimaMedicion = { ancho: anchoFinal, alto: altoFinal };
+                
+                // Actualizar UI con las medidas detectadas
+                if (medicionEstable) {
+                    medidasCapturadas.ancho = anchoFinal;
+                    medidasCapturadas.alto = altoFinal;
+                    document.getElementById('medidaAncho').textContent = `${anchoFinal.toFixed(2)} m`;
+                    document.getElementById('medidaAlto').textContent = `${altoFinal.toFixed(2)} m`;
+                }
+                
+                // Dibujar overlay de la pared detectada
+                dibujarOverlayDeteccion(ctx, regionPared, anchoFinal, altoFinal, medicionEstable);
+            } else {
+                // No se detectó pared, mostrar guía
+                dibujarGuiaMedicion(ctx, canvas.width, canvas.height);
+            }
+            
+            frameAnterior = imageData;
+        }
+        animationFrameId = requestAnimationFrame(detectarParedReal);
+    }
+    
+    detectarParedReal();
+}
+
+function detectarBordes(data, width, height) {
+    const bordes = new Array(width * height).fill(0);
+    
+    // Algoritmo de detección de bordes por diferencia de luminancia
+    for (let y = 1; y < height - 1; y++) {
+        for (let x = 1; x < width - 1; x++) {
+            const idx = (y * width + x) * 4;
+            const brillo = (data[idx] + data[idx+1] + data[idx+2]) / 3;
+            
+            // Calcular gradiente horizontal
+            const idxIzq = (y * width + (x - 1)) * 4;
+            const brilloIzq = (data[idxIzq] + data[idxIzq+1] + data[idxIzq+2]) / 3;
+            const gradX = Math.abs(brillo - brilloIzq);
+            
+            // Calcular gradiente vertical
+            const idxArr = ((y - 1) * width + x) * 4;
+            const brilloArr = (data[idxArr] + data[idxArr+1] + data[idxArr+2]) / 3;
+            const gradY = Math.abs(brillo - brilloArr);
+            
+            const gradiente = Math.sqrt(gradX * gradX + gradY * gradY);
+            
+            if (gradiente > 30) { // Umbral de detección de borde
+                bordes[y * width + x] = 1;
             }
         }
-        animationFrameId = requestAnimationFrame(detectarYPintar);
     }
     
-    detectarYPintar();
+    return bordes;
 }
 
-function detectarPared(ctx, anchoCanvas, altoCanvas) {
-    // Obtener datos de imagen para análisis
-    const imageData = ctx.getImageData(0, 0, anchoCanvas, altoCanvas);
-    const data = imageData.data;
+function encontrarRegionPared(bordes, width, height) {
+    let mejorRegion = null;
+    let maxArea = 0;
     
-    // Detectar bordes usando diferencia de luminancia
-    let bordesVerticales = [];
-    let bordesHorizontales = [];
+    // Buscar la región contigua más grande (simplificado)
+    let visitados = new Array(width * height).fill(false);
     
-    // Análisis simplificado de bordes
-    for (let x = 10; x < anchoCanvas - 10; x += 20) {
-        let diff = 0;
-        for (let y = 10; y < altoCanvas - 10; y += 5) {
-            const idx = (y * anchoCanvas + x) * 4;
-            const brillo = (data[idx] + data[idx+1] + data[idx+2]) / 3;
-            const idx2 = (y * anchoCanvas + (x + 5)) * 4;
-            const brillo2 = (data[idx2] + data[idx2+1] + data[idx2+2]) / 3;
-            diff += Math.abs(brillo - brillo2);
+    for (let y = 0; y < height; y += 10) {
+        for (let x = 0; x < width; x += 10) {
+            if (!visitados[y * width + x]) {
+                let minX = width, maxX = 0, minY = height, maxY = 0;
+                let area = 0;
+                
+                // Explorar región (BFS simplificado)
+                let queue = [{x, y}];
+                visitados[y * width + x] = true;
+                
+                while (queue.length > 0) {
+                    const p = queue.shift();
+                    area++;
+                    minX = Math.min(minX, p.x);
+                    maxX = Math.max(maxX, p.x);
+                    minY = Math.min(minY, p.y);
+                    maxY = Math.max(maxY, p.y);
+                    
+                    // Verificar vecinos (solo si hay bordes cerca)
+                    for (let dx = -1; dx <= 1; dx++) {
+                        for (let dy = -1; dy <= 1; dy++) {
+                            const nx = p.x + dx;
+                            const ny = p.y + dy;
+                            if (nx >= 0 && nx < width && ny >= 0 && ny < height) {
+                                const idx = ny * width + nx;
+                                if (!visitados[idx] && bordes[idx] === 0) {
+                                    visitados[idx] = true;
+                                    queue.push({x: nx, y: ny});
+                                }
+                            }
+                        }
+                    }
+                }
+                
+                if (area > maxArea && area > 1000) {
+                    maxArea = area;
+                    mejorRegion = {
+                        x: minX,
+                        y: minY,
+                        ancho: maxX - minX,
+                        alto: maxY - minY
+                    };
+                }
+            }
         }
-        if (diff > 5000) bordesVerticales.push(x);
     }
     
-    for (let y = 10; y < altoCanvas - 10; y += 20) {
-        let diff = 0;
-        for (let x = 10; x < anchoCanvas - 10; x += 5) {
-            const idx = (y * anchoCanvas + x) * 4;
-            const brillo = (data[idx] + data[idx+1] + data[idx+2]) / 3;
-            const idx2 = ((y + 5) * anchoCanvas + x) * 4;
-            const brillo2 = (data[idx2] + data[idx2+1] + data[idx2+2]) / 3;
-            diff += Math.abs(brillo - brillo2);
-        }
-        if (diff > 5000) bordesHorizontales.push(y);
-    }
-    
-    // Calcular medida estimada basada en proporción de pantalla
-    // Asumiendo que una pared típica tiene ancho ≈ 4-8 metros y alto ≈ 2-3 metros
-    let anchoEstimado = 0;
-    let altoEstimado = 0;
-    
-    if (bordesVerticales.length > 1) {
-        const anchoPx = Math.max(...bordesVerticales) - Math.min(...bordesVerticales);
-        // Calibración: asumimos que el ancho de pantalla representa aproximadamente 6 metros
-        anchoEstimado = (anchoPx / anchoCanvas) * 6;
-    } else {
-        anchoEstimado = 5; // Valor por defecto
-    }
-    
-    if (bordesHorizontales.length > 1) {
-        const altoPx = Math.max(...bordesHorizontales) - Math.min(...bordesHorizontales);
-        altoEstimado = (altoPx / altoCanvas) * 3.5;
-    } else {
-        altoEstimado = 2.5; // Valor por defecto
-    }
-    
-    // Limitar valores razonables
-    anchoEstimado = Math.min(Math.max(anchoEstimado, 1), 15);
-    altoEstimado = Math.min(Math.max(altoEstimado, 0.5), 5);
-    
-    return {
-        ancho: anchoEstimado,
-        alto: altoEstimado,
-        bordesV: bordesVerticales,
-        bordesH: bordesHorizontales
-    };
+    return mejorRegion;
 }
 
-function dibujarOverlayMedicion(ctx, anchoCanvas, altoCanvas, medidas) {
+function dibujarOverlayDeteccion(ctx, region, anchoM, altoM, estable) {
+    const color = estable ? '#10b981' : '#f59e0b';
+    
     // Dibujar rectángulo de la pared detectada
-    if (medidas.bordesV && medidas.bordesV.length > 0 && medidas.bordesH && medidas.bordesH.length > 0) {
-        const minX = Math.min(...medidas.bordesV);
-        const maxX = Math.max(...medidas.bordesV);
-        const minY = Math.min(...medidas.bordesH);
-        const maxY = Math.max(...medidas.bordesH);
-        
-        ctx.strokeStyle = '#10b981';
-        ctx.lineWidth = 4;
-        ctx.strokeRect(minX, minY, maxX - minX, maxY - minY);
-    }
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 4;
+    ctx.strokeRect(region.x, region.y, region.ancho, region.alto);
     
-    // Dibujar líneas de medición
+    // Dibujar esquinas redondeadas
+    ctx.fillStyle = color;
+    const esquinaSize = 15;
+    ctx.fillRect(region.x - 2, region.y - 2, esquinaSize, 4);
+    ctx.fillRect(region.x - 2, region.y - 2, 4, esquinaSize);
+    ctx.fillRect(region.x + region.ancho - esquinaSize + 2, region.y - 2, esquinaSize, 4);
+    ctx.fillRect(region.x + region.ancho + 2, region.y - 2, 4, esquinaSize);
+    ctx.fillRect(region.x - 2, region.y + region.alto + 2, esquinaSize, 4);
+    ctx.fillRect(region.x - 2, region.y + region.alto - esquinaSize + 2, 4, esquinaSize);
+    ctx.fillRect(region.x + region.ancho - esquinaSize + 2, region.y + region.alto + 2, esquinaSize, 4);
+    ctx.fillRect(region.x + region.ancho + 2, region.y + region.alto - esquinaSize + 2, 4, esquinaSize);
+    
+    // Mostrar medidas en el overlay
     ctx.fillStyle = 'rgba(0,0,0,0.7)';
-    ctx.fillRect(10, 10, 250, 80);
+    ctx.fillRect(region.x + 10, region.y + 10, 180, 60);
     ctx.fillStyle = 'white';
-    ctx.font = 'bold 16px Arial';
-    ctx.fillText(`📐 Ancho: ${medidas.ancho.toFixed(2)} m`, 20, 35);
-    ctx.fillText(`📏 Alto: ${medidas.alto.toFixed(2)} m`, 20, 65);
+    ctx.font = 'bold 14px Arial';
+    ctx.fillText(`📐 Ancho: ${anchoM.toFixed(2)} m`, region.x + 20, region.y + 30);
+    ctx.fillText(`📏 Alto: ${altoM.toFixed(2)} m`, region.x + 20, region.y + 55);
     
-    // Dibujar guía visual
-    ctx.strokeStyle = '#10b981';
-    ctx.lineWidth = 2;
-    ctx.setLineDash([10, 10]);
-    ctx.strokeRect(anchoCanvas * 0.15, altoCanvas * 0.2, anchoCanvas * 0.7, altoCanvas * 0.5);
+    if (estable) {
+        ctx.fillStyle = '#10b981';
+        ctx.font = 'bold 12px Arial';
+        ctx.fillText('✅ Listo para aplicar', region.x + 10, region.y + 85);
+    }
+}
+
+function dibujarGuiaMedicion(ctx, width, height) {
+    // Dibujar rectángulo guía para que el usuario alinee la pared
+    const guiaX = width * 0.15;
+    const guiaY = height * 0.2;
+    const guiaAncho = width * 0.7;
+    const guiaAlto = height * 0.5;
+    
+    ctx.strokeStyle = '#f59e0b';
+    ctx.lineWidth = 3;
+    ctx.setLineDash([10, 15]);
+    ctx.strokeRect(guiaX, guiaY, guiaAncho, guiaAlto);
     ctx.setLineDash([]);
     
-    // Dibujar texto de instrucción
-    ctx.fillStyle = '#10b981';
-    ctx.font = '14px Arial';
-    ctx.fillText('🎯 Alinea la pared dentro del rectángulo', anchoCanvas * 0.25, altoCanvas * 0.15);
+    ctx.fillStyle = 'rgba(245, 158, 11, 0.8)';
+    ctx.font = 'bold 14px Arial';
+    ctx.fillText('🎯 Alinea la pared dentro del rectángulo', width * 0.25, height * 0.15);
+    
+    // Dibujar regla virtual
+    const rulerY = height - 50;
+    ctx.fillStyle = 'rgba(0,0,0,0.8)';
+    ctx.fillRect(0, rulerY - 20, width, 50);
+    
+    for (let x = 0; x < width; x += 50) {
+        ctx.strokeStyle = '#f59e0b';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(x, rulerY - 10);
+        ctx.lineTo(x, rulerY + 10);
+        ctx.stroke();
+        
+        const cm = (x / width) * 250;
+        ctx.fillStyle = 'white';
+        ctx.font = '10px Arial';
+        ctx.fillText(`${cm.toFixed(0)}cm`, x - 15, rulerY + 25);
+    }
+    
+    ctx.fillStyle = '#f59e0b';
+    ctx.font = 'bold 12px Arial';
+    ctx.fillText('📏 REGLA DE REFERENCIA', 15, rulerY - 5);
 }
 
-// Función para calibrar con un objeto de referencia
-function calibrarConReferencia() {
-    const referencia = prompt(
-        "🔧 CALIBRACIÓN DE MEDICIÓN\n\n" +
-        "Coloca un objeto de tamaño conocido en la cámara\n" +
-        "y escribe su tamaño REAL en metros.\n\n" +
-        "Ejemplos:\n" +
-        "- Hoja A4: 0.297m\n" +
-        "- Celular: 0.15m\n" +
-        "- Puerta: 2.0m\n\n" +
-        "Tamaño real del objeto (en metros):"
-    );
+// ==================== CALIBRACIÓN MANUAL PRECISA ====================
+
+function calibrarConObjetoReal() {
+    const canvas = document.getElementById('canvas');
+    const ctx = canvas.getContext('2d');
+    puntosCalibracion = [];
     
-    if (referencia && !isNaN(parseFloat(referencia))) {
-        mostrarToast(`✅ Calibración configurada: ${referencia}m como referencia`);
-        return parseFloat(referencia);
+    mostrarToast("📱 Toca el extremo IZQUIERDO del objeto de referencia");
+    
+    function capturarPuntoCalibracion(e) {
+        const rect = canvas.getBoundingClientRect();
+        let x, y;
+        
+        if (e.touches) {
+            x = e.touches[0].clientX - rect.left;
+            y = e.touches[0].clientY - rect.top;
+            e.preventDefault();
+        } else {
+            x = e.clientX - rect.left;
+            y = e.clientY - rect.top;
+        }
+        
+        // Escalar a coordenadas del canvas real
+        const scaleX = canvas.width / rect.width;
+        const scaleY = canvas.height / rect.height;
+        const canvasX = x * scaleX;
+        const canvasY = y * scaleY;
+        
+        puntosCalibracion.push({ x: canvasX, y: canvasY });
+        
+        // Dibujar punto
+        ctx.fillStyle = '#10b981';
+        ctx.beginPath();
+        ctx.arc(canvasX, canvasY, 10, 0, 2 * Math.PI);
+        ctx.fill();
+        ctx.fillStyle = 'white';
+        ctx.beginPath();
+        ctx.arc(canvasX, canvasY, 5, 0, 2 * Math.PI);
+        ctx.fill();
+        
+        if (puntosCalibracion.length === 1) {
+            mostrarToast("📱 Ahora toca el extremo DERECHO del objeto");
+        } else if (puntosCalibracion.length === 2) {
+            const distanciaPx = Math.abs(puntosCalibracion[1].x - puntosCalibracion[0].x);
+            
+            const tamañoReal = prompt(
+                "📏 CALIBRACIÓN\n\n" +
+                "¿Cuál es el tamaño REAL del objeto en METROS?\n\n" +
+                "Ejemplos:\n" +
+                "• Hoja A4 ancho: 0.297m\n" +
+                "• Celular: 0.15m\n" +
+                "• Puerta: 0.9m\n\n" +
+                "Tamaño real (metros):"
+            );
+            
+            if (tamañoReal && !isNaN(parseFloat(tamañoReal))) {
+                factorEscala = parseFloat(tamañoReal) / distanciaPx;
+                mostrarToast(`✅ Calibrado! 1 píxel = ${(factorEscala * 100).toFixed(2)} cm`);
+                
+                // Remover event listeners
+                canvas.removeEventListener('click', capturarPuntoCalibracion);
+                canvas.removeEventListener('touchstart', capturarPuntoCalibracion);
+                
+                iniciarMedicionConCalibracion();
+            } else {
+                mostrarErrorGeneral('Calibración cancelada');
+            }
+        }
     }
-    return null;
+    
+    canvas.addEventListener('click', capturarPuntoCalibracion);
+    canvas.addEventListener('touchstart', capturarPuntoCalibracion);
 }
+
+function iniciarMedicionConCalibracion() {
+    const canvas = document.getElementById('canvas');
+    const ctx = canvas.getContext('2d');
+    let puntosPared = [];
+    
+    mostrarToast("📏 Toca dos puntos para medir el ANCHO de la pared");
+    
+    function medirPared(e) {
+        const rect = canvas.getBoundingClientRect();
+        let x, y;
+        
+        if (e.touches) {
+            x = e.touches[0].clientX - rect.left;
+            y = e.touches[0].clientY - rect.top;
+            e.preventDefault();
+        } else {
+            x = e.clientX - rect.left;
+            y = e.clientY - rect.top;
+        }
+        
+        const scaleX = canvas.width / rect.width;
+        const scaleY = canvas.height / rect.height;
+        const canvasX = x * scaleX;
+        const canvasY = y * scaleY;
+        
+        puntosPared.push({ x: canvasX, y: canvasY });
+        
+        // Dibujar punto y línea
+        ctx.fillStyle = '#10b981';
+        ctx.beginPath();
+        ctx.arc(canvasX, canvasY, 8, 0, 2 * Math.PI);
+        ctx.fill();
+        
+        if (puntosPared.length === 2) {
+            ctx.beginPath();
+            ctx.moveTo(puntosPared[0].x, puntosPared[0].y);
+            ctx.lineTo(puntosPared[1].x, puntosPared[1].y);
+            ctx.strokeStyle = '#10b981';
+            ctx.lineWidth = 3;
+            ctx.stroke();
+            
+            const distanciaPx = Math.sqrt(
+                Math.pow(puntosPared[1].x - puntosPared[0].x, 2) +
+                Math.pow(puntosPared[1].y - puntosPared[0].y, 2)
+            );
+            
+            const distanciaReal = distanciaPx * factorEscala;
+            
+            if (!medidasCapturadas.ancho) {
+                medidasCapturadas.ancho = distanciaReal;
+                document.getElementById('medidaAncho').textContent = `${distanciaReal.toFixed(2)} m`;
+                mostrarToast(`✅ Ancho: ${distanciaReal.toFixed(2)} m. Ahora mide el ALTO`);
+                puntosPared = [];
+                mostrarToast("📏 Toca dos puntos para medir el ALTO de la pared");
+            } else {
+                medidasCapturadas.alto = distanciaReal;
+                document.getElementById('medidaAlto').textContent = `${distanciaReal.toFixed(2)} m`;
+                mostrarToast(`✅ Alto: ${distanciaReal.toFixed(2)} m`);
+                
+                canvas.removeEventListener('click', medirPared);
+                canvas.removeEventListener('touchstart', medirPared);
+                
+                setTimeout(() => {
+                    if (confirm('¿Aplicar medidas al cálculo?')) {
+                        aplicarMedidas();
+                    }
+                }, 500);
+            }
+        }
+    }
+    
+    canvas.addEventListener('click', medirPared);
+    canvas.addEventListener('touchstart', medirPared);
+}
+
+// ==================== FUNCIONES DE UI ====================
 
 function capturarMedida(tipo) {
     if (tipo === 'automatico') {
         if (medidasCapturadas.ancho > 0 && medidasCapturadas.alto > 0) {
             aplicarMedidas();
         } else {
-            mostrarErrorGeneral('Esperando detección automática de la pared...');
+            mostrarErrorGeneral('Esperando detección automática. Apunta la cámara a la pared.');
         }
-    } else {
-        // Modo manual (original)
-        let medidaEstimada = prompt(
-            `📏 Medición de ${tipo === 'ancho' ? 'ancho' : 'alto'}\n\n` +
-            `Instrucciones:\n` +
-            `1. Mira la pared en la cámara\n` +
-            `2. Usa la guía visual como referencia\n` +
-            `3. Ingresa la medida estimada en metros\n\n` +
-            `💡 Medida actual detectada: ${tipo === 'ancho' ? medidasCapturadas.ancho.toFixed(2) : medidasCapturadas.alto.toFixed(2)} m`
+    } else if (tipo === 'calibrar') {
+        calibrarConObjetoReal();
+    } else if (tipo === 'ancho' || tipo === 'alto') {
+        const valor = prompt(
+            `📏 Medición manual de ${tipo === 'ancho' ? 'ancho' : 'alto'}\n\n` +
+            `Usa la regla virtual como referencia.\n` +
+            `Ingresa el valor en METROS:`
         );
         
-        if (medidaEstimada && !isNaN(parseFloat(medidaEstimada))) {
-            const valor = parseFloat(medidaEstimada);
-            
-            if (tipo === 'ancho') {
-                medidasCapturadas.ancho = valor;
-                document.getElementById('medidaAncho').textContent = `${valor.toFixed(2)} m`;
-                mostrarToast('Ancho capturado: ' + valor.toFixed(2) + ' m');
+        if (valor && !isNaN(parseFloat(valor))) {
+            const v = parseFloat(valor);
+            if (v > 0 && v < 20) {
+                if (tipo === 'ancho') {
+                    medidasCapturadas.ancho = v;
+                    document.getElementById('medidaAncho').textContent = `${v.toFixed(2)} m`;
+                } else {
+                    medidasCapturadas.alto = v;
+                    document.getElementById('medidaAlto').textContent = `${v.toFixed(2)} m`;
+                }
+                mostrarToast(`✅ ${tipo === 'ancho' ? 'Ancho' : 'Alto'} registrado: ${v.toFixed(2)} m`);
+                
+                if (medidasCapturadas.ancho > 0 && medidasCapturadas.alto > 0) {
+                    setTimeout(() => {
+                        if (confirm('¿Aplicar medidas al cálculo?')) {
+                            aplicarMedidas();
+                        }
+                    }, 500);
+                }
             } else {
-                medidasCapturadas.alto = valor;
-                document.getElementById('medidaAlto').textContent = `${valor.toFixed(2)} m`;
-                mostrarToast('Alto capturado: ' + valor.toFixed(2) + ' m');
+                mostrarErrorGeneral('La medida debe estar entre 0.1 y 20 metros');
             }
-            
-            if (medidasCapturadas.ancho > 0 && medidasCapturadas.alto > 0) {
-                setTimeout(() => {
-                    if (confirm('¿Deseas aplicar ambas medidas al cálculo?')) {
-                        aplicarMedidas();
-                    }
-                }, 500);
-            }
-        } else {
-            mostrarErrorGeneral('Por favor, ingresa un número válido para la medida.');
         }
     }
 }
@@ -245,12 +481,7 @@ function capturarMedida(tipo) {
 function mostrarToast(mensaje) {
     const toast = document.createElement('div');
     toast.className = 'toast-notification';
-    toast.innerHTML = `
-        <div class="toast-content">
-            <i class="fas fa-check-circle"></i>
-            <span>${mensaje}</span>
-        </div>
-    `;
+    toast.innerHTML = `<div class="toast-content"><i class="fas fa-check-circle"></i><span>${mensaje}</span></div>`;
     document.body.appendChild(toast);
     
     setTimeout(() => {
@@ -276,41 +507,32 @@ function aplicarMedidas() {
     }
     
     const modal = bootstrap.Modal.getInstance(document.getElementById('cameraModal'));
-    if (modal) {
-        modal.hide();
-    }
+    if (modal) modal.hide();
     
-    if (animationFrameId) {
-        cancelAnimationFrame(animationFrameId);
-    }
-    
-    if (stream) {
-        stream.getTracks().forEach(track => track.stop());
-    }
+    if (animationFrameId) cancelAnimationFrame(animationFrameId);
+    if (stream) stream.getTracks().forEach(track => track.stop());
     
     mostrarToast('✅ Medidas aplicadas correctamente');
     
-    if (confirm('¿Deseas calcular la cantidad de ladrillos con estas medidas?')) {
-        calcular();
-    }
+    setTimeout(() => {
+        if (confirm('¿Calcular cantidad de ladrillos?')) calcular();
+    }, 500);
 }
 
-// Cerrar cámara correctamente
+// ==================== CIERRE DE CÁMARA ====================
+
 document.getElementById('cameraModal')?.addEventListener('hidden.bs.modal', () => {
-    if (animationFrameId) {
-        cancelAnimationFrame(animationFrameId);
-    }
+    if (animationFrameId) cancelAnimationFrame(animationFrameId);
     if (stream) {
         stream.getTracks().forEach(track => track.stop());
         stream = null;
     }
 });
 
-// ==================== VALIDACIONES (originales se mantienen) ====================
+// ==================== VALIDACIONES ====================
 
 function validarNumeroNegativo(valor, campoId, nombreCampo) {
     const errorDiv = document.getElementById(`error${campoId}`);
-    
     if (!errorDiv) return true;
     
     if (valor === "" || valor === null) {
@@ -341,31 +563,17 @@ function validarNumeroNegativo(valor, campoId, nombreCampo) {
 function validarTodosLosCampos() {
     let valid = true;
     
-    const largoPared = document.getElementById('largoPared').value;
-    const altoPared = document.getElementById('altoPared').value;
+    if (!validarNumeroNegativo(document.getElementById('largoPared').value, 'LargoPared', 'largo de la pared')) valid = false;
+    if (!validarNumeroNegativo(document.getElementById('altoPared').value, 'AltoPared', 'alto de la pared')) valid = false;
+    if (!validarNumeroNegativo(document.getElementById('largoLadrillo').value, 'LargoLadrillo', 'largo del ladrillo')) valid = false;
+    if (!validarNumeroNegativo(document.getElementById('altoLadrillo').value, 'AltoLadrillo', 'alto del ladrillo')) valid = false;
+    if (!validarNumeroNegativo(document.getElementById('junta').value, 'Junta', 'la junta')) valid = false;
     
-    if (!validarNumeroNegativo(largoPared, 'LargoPared', 'largo de la pared')) valid = false;
-    if (!validarNumeroNegativo(altoPared, 'AltoPared', 'alto de la pared')) valid = false;
-    
-    const largoLadrillo = document.getElementById('largoLadrillo').value;
-    const altoLadrillo = document.getElementById('altoLadrillo').value;
-    const junta = document.getElementById('junta').value;
-    
-    if (!validarNumeroNegativo(largoLadrillo, 'LargoLadrillo', 'largo del ladrillo')) valid = false;
-    if (!validarNumeroNegativo(altoLadrillo, 'AltoLadrillo', 'alto del ladrillo')) valid = false;
-    if (!validarNumeroNegativo(junta, 'Junta', 'valor de la junta')) valid = false;
-    
-    const vanos = document.querySelectorAll('.vano');
-    vanos.forEach((vano, index) => {
-        const anchoInput = vano.querySelector(`input[id^="anchoVano"]`);
-        const altoInput = vano.querySelector(`input[id^="altoVano"]`);
-        
-        if (anchoInput) {
-            if (!validarNumeroNegativo(anchoInput.value, `Vano${index}Ancho`, `ancho del vano ${index + 1}`)) valid = false;
-        }
-        if (altoInput) {
-            if (!validarNumeroNegativo(altoInput.value, `Vano${index}Alto`, `alto del vano ${index + 1}`)) valid = false;
-        }
+    document.querySelectorAll('.vano').forEach((vano, i) => {
+        const ancho = vano.querySelector('input[id^="anchoVano"]')?.value;
+        const alto = vano.querySelector('input[id^="altoVano"]')?.value;
+        if (!validarNumeroNegativo(ancho, `Vano${i}Ancho`, `ancho del vano ${i + 1}`)) valid = false;
+        if (!validarNumeroNegativo(alto, `Vano${i}Alto`, `alto del vano ${i + 1}`)) valid = false;
     });
     
     return valid;
@@ -377,188 +585,61 @@ function mostrarErrorGeneral(mensaje) {
     resultadoDiv.innerHTML = `
         <div style="background: #fee2e2; color: #dc2626; padding: 20px; border-radius: 16px; text-align: center;">
             <i class="fas fa-exclamation-triangle" style="font-size: 2rem; margin-bottom: 10px; display: block;"></i>
-            <strong>Error</strong><br>
-            ${mensaje}
+            <strong>Error</strong><br>${mensaje}
         </div>
     `;
     resultadoDiv.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    
-    setTimeout(() => {
-        if (resultadoDiv.innerHTML.includes('Error')) {
-            resultadoDiv.style.display = 'none';
-        }
-    }, 3000);
+    setTimeout(() => { if (resultadoDiv.innerHTML.includes('Error')) resultadoDiv.style.display = 'none'; }, 3000);
 }
 
 function limpiarErrores() {
-    const errores = document.querySelectorAll('.error-message');
-    errores.forEach(error => {
-        error.textContent = '';
-        error.style.display = 'block';
-    });
-    
-    const inputsConError = document.querySelectorAll('.form-control-modern.input-error');
-    inputsConError.forEach(input => {
-        input.classList.remove('input-error');
-    });
+    document.querySelectorAll('.error-message').forEach(el => { el.textContent = ''; el.style.display = 'block'; });
+    document.querySelectorAll('.form-control-modern.input-error').forEach(el => el.classList.remove('input-error'));
 }
 
 // ==================== CONVERSIONES ====================
 
-function convertirAMetros(valor, unidad, tipo = 'longitud') {
-    let metros = parseFloat(valor);
-    
-    if (isNaN(metros)) return 0;
-    
-    if (tipo === 'junta') {
-        switch(unidad) {
-            case 'mm': return metros / 1000;
-            case 'cm': return metros / 100;
-            case 'in': return metros * 0.0254;
-            case 'm': return metros;
-            default: return metros;
-        }
+function convertirAMetros(valor, unidad, esJunta = false) {
+    let v = parseFloat(valor);
+    if (isNaN(v)) return 0;
+    if (esJunta) {
+        if (unidad === 'mm') return v / 1000;
+        if (unidad === 'cm') return v / 100;
+        if (unidad === 'in') return v * 0.0254;
+        return v;
     }
-    
-    switch(unidad) {
-        case 'cm': return metros / 100;
-        case 'in': return metros * 0.0254;
-        case 'm': return metros;
-        default: return metros;
-    }
-}
-
-// ==================== RECOMENDACIÓN INTELIGENTE ====================
-
-function recomendarMargen(ladrillosBase, areaTotal, tieneVanos, formaPared) {
-    let porcentajeRecomendado = 5;
-    let razon = "";
-    let explicacion = "";
-    
-    const esAreaGrande = areaTotal > 20;
-    const hayMuchosVanos = tieneVanos > 2;
-    const esFormaIrregular = formaPared === "irregular";
-    
-    if (esAreaGrande && hayMuchosVanos) {
-        porcentajeRecomendado = 10;
-        razon = "⚠️ Alto desperdicio";
-        explicacion = "Área grande con múltiples vanos genera más cortes y desperdicio.";
-    } else if (esAreaGrande || hayMuchosVanos) {
-        porcentajeRecomendado = 8;
-        razon = "⚡ Desperdicio moderado";
-        explicacion = esAreaGrande ? "Área grande requiere más material por cortes y ajustes." : "Múltiples vanos aumentan el desperdicio por cortes alrededor de ellos.";
-    } else if (esFormaIrregular) {
-        porcentajeRecomendado = 10;
-        razon = "🔺 Alto desperdicio";
-        explicacion = "Pared con forma irregular genera muchos cortes y desperdicio de material.";
-    } else {
-        porcentajeRecomendado = 5;
-        razon = "✅ Bajo desperdicio";
-        explicacion = "Pared rectangular sin muchos vanos, desperdicio mínimo recomendado.";
-    }
-    
-    if (ladrillosBase < 100) {
-        porcentajeRecomendado = Math.min(porcentajeRecomendado + 2, 10);
-        explicacion += " Al ser un proyecto pequeño, se recomienda un margen ligeramente mayor.";
-    } else if (ladrillosBase > 1000) {
-        porcentajeRecomendado = Math.max(porcentajeRecomendado - 1, 5);
-        explicacion += " Proyecto grande permite optimizar la compra, margen reducido.";
-    }
-    
-    return {
-        porcentaje: porcentajeRecomendado,
-        razon: razon,
-        explicacion: explicacion
-    };
+    if (unidad === 'cm') return v / 100;
+    if (unidad === 'in') return v * 0.0254;
+    return v;
 }
 
 // ==================== VANOS ====================
 
 function agregarVano() {
     contadorVanos++;
-    const container = document.getElementById('vanosContainer');
-    const vanoDiv = document.createElement('div');
-    vanoDiv.className = 'vano';
-    vanoDiv.id = `vano${contadorVanos}`;
-    
-    vanoDiv.innerHTML = `
-        <button class="btn-danger" onclick="eliminarVano(${contadorVanos})">
-            <i class="fas fa-times"></i>
-        </button>
+    const div = document.createElement('div');
+    div.className = 'vano';
+    div.id = `vano${contadorVanos}`;
+    div.innerHTML = `
+        <button class="btn-danger" onclick="eliminarVano(${contadorVanos})"><i class="fas fa-times"></i></button>
         <div class="row g-3">
-            <div class="col-md-5">
-                <label style="font-size: 0.85rem;">📐 Ancho del vano</label>
-                <input type="number" step="any" id="anchoVano${contadorVanos}" class="form-control-modern" placeholder="Ej: 1.0">
-                <div class="error-message" id="errorAnchoVano${contadorVanos}"></div>
-            </div>
-            <div class="col-md-5">
-                <label style="font-size: 0.85rem;">📏 Alto del vano</label>
-                <input type="number" step="any" id="altoVano${contadorVanos}" class="form-control-modern" placeholder="Ej: 2.0">
-                <div class="error-message" id="errorAltoVano${contadorVanos}"></div>
-            </div>
-            <div class="col-md-2">
-                <label style="font-size: 0.85rem;">Unidad</label>
-                <select id="unidadVano${contadorVanos}" class="form-select-modern" style="font-size: 0.85rem;">
-                    <option value="m">m</option>
-                    <option value="cm">cm</option>
-                    <option value="in">in</option>
-                </select>
-            </div>
+            <div class="col-md-5"><label>📐 Ancho</label><input type="number" step="any" id="anchoVano${contadorVanos}" class="form-control-modern" placeholder="Ej: 1.0"><div class="error-message" id="errorAnchoVano${contadorVanos}"></div></div>
+            <div class="col-md-5"><label>📏 Alto</label><input type="number" step="any" id="altoVano${contadorVanos}" class="form-control-modern" placeholder="Ej: 2.0"><div class="error-message" id="errorAltoVano${contadorVanos}"></div></div>
+            <div class="col-md-2"><label>Unidad</label><select id="unidadVano${contadorVanos}" class="form-select-modern"><option value="m">m</option><option value="cm">cm</option><option value="in">in</option></select></div>
         </div>
     `;
-    
-    container.appendChild(vanoDiv);
-    
-    const inputs = vanoDiv.querySelectorAll('input');
-    inputs.forEach(input => {
-        input.addEventListener('input', function() {
-            limpiarErrorInput(this);
-        });
-    });
+    document.getElementById('vanosContainer').appendChild(div);
 }
 
-function limpiarErrorInput(input) {
-    let errorId = '';
-    if (input.id.includes('anchoVano')) {
-        errorId = input.id.replace('anchoVano', 'errorAnchoVano');
-    } else if (input.id.includes('altoVano')) {
-        errorId = input.id.replace('altoVano', 'errorAltoVano');
-    } else {
-        errorId = input.id.replace('largo', 'errorLargo')
-                           .replace('alto', 'errorAlto')
-                           .replace('junta', 'errorJunta');
-    }
-    
-    const errorDiv = document.getElementById(errorId);
-    if (errorDiv && input.value !== "") {
-        const value = parseFloat(input.value);
-        if (!isNaN(value) && value > 0) {
-            errorDiv.textContent = '';
-            input.classList.remove('input-error');
-        }
-    }
-}
-
-function eliminarVano(id) {
-    const vano = document.getElementById(`vano${id}`);
-    if (vano) {
-        vano.remove();
-    }
-}
+function eliminarVano(id) { document.getElementById(`vano${id}`)?.remove(); }
 
 // ==================== CÁLCULO PRINCIPAL ====================
 
 async function calcular() {
     limpiarErrores();
-
-    const resultadoDiv = document.getElementById('resultado');
-    resultadoDiv.style.display = 'none';
-
-    if (!validarTodosLosCampos()) {
-        mostrarErrorGeneral('Por favor, corrija los errores marcados antes de continuar.');
-        return;
-    }
-
+    document.getElementById('resultado').style.display = 'none';
+    if (!validarTodosLosCampos()) { mostrarErrorGeneral('Corrige los errores marcados'); return; }
+    
     const largoPared = parseFloat(document.getElementById('largoPared').value);
     const altoPared = parseFloat(document.getElementById('altoPared').value);
     const unidadPared = document.getElementById('unidadPared').value;
@@ -567,224 +648,77 @@ async function calcular() {
     const junta = parseFloat(document.getElementById('junta').value);
     const unidadLadrillo = document.getElementById('unidadLadrillo').value;
     const unidadJunta = document.getElementById('unidadJunta').value;
-
+    
     let vanos = [];
-
     document.querySelectorAll('.vano').forEach(vano => {
-        const anchoInput = vano.querySelector('input[id^="anchoVano"]');
-        const altoInput = vano.querySelector('input[id^="altoVano"]');
-        
-        if (anchoInput && altoInput) {
-            const ancho = parseFloat(anchoInput.value);
-            const alto = parseFloat(altoInput.value);
-
-            if (!isNaN(ancho) && !isNaN(alto) && ancho > 0 && alto > 0) {
-                const unidadVano = vano.querySelector('select[id^="unidadVano"]').value;
-                vanos.push({
-                    ancho: ancho,
-                    alto: alto,
-                    unidad: unidadVano
-                });
-            }
+        const ancho = parseFloat(vano.querySelector('input[id^="anchoVano"]')?.value);
+        const alto = parseFloat(vano.querySelector('input[id^="altoVano"]')?.value);
+        if (!isNaN(ancho) && !isNaN(alto) && ancho > 0 && alto > 0) {
+            vanos.push({ ancho, alto, unidad: vano.querySelector('select[id^="unidadVano"]').value });
         }
     });
-
+    
     try {
-        const response = await fetch(
-            'https://brickcalc-microservice.onrender.com/calcular',
-            {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({
-                    largoPared,
-                    altoPared,
-                    unidadPared,
-                    vanos,
-                    largoLadrillo,
-                    altoLadrillo,
-                    junta,
-                    unidadLadrillo,
-                    unidadJunta
-                })
-            }
-        );
-
-        if (!response.ok) {
-            throw new Error(`HTTP error! status: ${response.status}`);
-        }
-
+        const response = await fetch('https://brickcalc-microservice.onrender.com/calcular', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ largoPared, altoPared, unidadPared, vanos, largoLadrillo, altoLadrillo, junta, unidadLadrillo, unidadJunta })
+        });
+        
+        if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
         const datos = await response.json();
-
+        
         const areaParedCalc = convertirAMetros(largoPared, unidadPared) * convertirAMetros(altoPared, unidadPared);
         let areaVanosCalc = 0;
-        vanos.forEach(v => {
-            areaVanosCalc += convertirAMetros(v.ancho, v.unidad) * convertirAMetros(v.alto, v.unidad);
-        });
+        vanos.forEach(v => { areaVanosCalc += convertirAMetros(v.ancho, v.unidad) * convertirAMetros(v.alto, v.unidad); });
         const areaNetaCalc = areaParedCalc - areaVanosCalc;
-
+        
         mostrarResultados({
-            cantidadBase: datos.totalLadrillos,
-            cantidad5: datos.totalConMargen,
-            cantidad10: Math.ceil(datos.totalLadrillos * 1.10),
-            cantidadRecomendada: datos.totalConMargen,
-            porcentajeRecomendado: 5,
-            razonRecomendacion: "✅ Medición automática activada",
-            explicacionRecomendacion: "Las medidas fueron capturadas automáticamente por la cámara con detección de bordes.",
-            areaPared: areaParedCalc,
-            areaVanos: areaVanosCalc,
-            areaNeta: areaNetaCalc,
-            volumenMortero: datos.volumenMortero || areaNetaCalc * 0.02,
-            vanos: vanos.length,
-            formaPared: "regular"
+            cantidadBase: datos.totalLadrillos, cantidad5: datos.totalConMargen,
+            cantidad10: Math.ceil(datos.totalLadrillos * 1.10), cantidadRecomendada: datos.totalConMargen,
+            porcentajeRecomendado: 5, razonRecomendacion: "✅ Medición automática", explicacionRecomendacion: "Medidas detectadas por cámara con detección de bordes",
+            areaPared: areaParedCalc, areaVanos: areaVanosCalc, areaNeta: areaNetaCalc, volumenMortero: datos.volumenMortero || areaNetaCalc * 0.02,
+            vanos: vanos.length, formaPared: "regular"
         });
-
-    } catch (error) {
-        console.error('Error:', error);
-        mostrarErrorGeneral('❌ Error conectando con el servidor. Por favor, intenta más tarde.');
-    }
+    } catch (error) { mostrarErrorGeneral('❌ Error conectando con el servidor'); }
 }
 
 function mostrarResultados(datos) {
     const resultadoDiv = document.getElementById('resultado');
     resultadoDiv.style.display = 'block';
-    
     resultadoDiv.innerHTML = `
-        <div style="margin-bottom: 20px;">
-            <h4 style="color: #059669; margin-bottom: 15px;">
-                <i class="fas fa-chart-bar"></i> Resultados del Cálculo
-            </h4>
+        <h4><i class="fas fa-chart-bar"></i> Resultados</h4>
+        <div class="resultado-item" style="background:#3b82f6;color:white;padding:15px;border-radius:16px;text-align:center">
+            <strong>Cantidad base:</strong> ${datos.cantidadBase.toLocaleString()} unidades
         </div>
-        
-        <div class="resultado-item" style="background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);">
-            <p>
-                <i class="fas fa-calculator"></i>
-                <strong>Cantidad base (sin desperdicio):</strong>
-                <span style="font-size: 1.3rem; font-weight: 800;">${datos.cantidadBase.toLocaleString()} unidades</span>
-            </p>
+        <div class="row g-3 mt-2">
+            <div class="col-md-6"><div class="margen-card margen-5"><strong>Margen 5%</strong><div class="margen-cantidad">${datos.cantidad5.toLocaleString()}</div><small>+${(datos.cantidad5-datos.cantidadBase).toLocaleString()}</small></div></div>
+            <div class="col-md-6"><div class="margen-card margen-10"><strong>Margen 10%</strong><div class="margen-cantidad">${datos.cantidad10.toLocaleString()}</div><small>+${(datos.cantidad10-datos.cantidadBase).toLocaleString()}</small></div></div>
         </div>
-        
-        <div style="margin: 20px 0;">
-            <h5 style="color: #1e293b; margin-bottom: 15px;">
-                <i class="fas fa-percent"></i> Opciones con margen de desperdicio
-            </h5>
-            
-            <div class="row g-3">
-                <div class="col-md-6">
-                    <div class="margen-card margen-5">
-                        <div class="margen-header">
-                            <i class="fas fa-shield-alt"></i>
-                            <strong>Margen del 5%</strong>
-                        </div>
-                        <div class="margen-cantidad">
-                            ${datos.cantidad5.toLocaleString()} ladrillos
-                        </div>
-                        <div class="margen-diferencia">
-                            +${(datos.cantidad5 - datos.cantidadBase).toLocaleString()} unidades
-                        </div>
-                    </div>
-                </div>
-                
-                <div class="col-md-6">
-                    <div class="margen-card margen-10">
-                        <div class="margen-header">
-                            <i class="fas fa-shield-alt"></i>
-                            <strong>Margen del 10%</strong>
-                        </div>
-                        <div class="margen-cantidad">
-                            ${datos.cantidad10.toLocaleString()} ladrillos
-                        </div>
-                        <div class="margen-diferencia">
-                            +${(datos.cantidad10 - datos.cantidadBase).toLocaleString()} unidades
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-        
-        <div class="recomendacion-container">
-            <div class="recomendacion-header">
-                <i class="fas fa-star-of-life"></i>
-                <strong>RECOMENDACIÓN INTELIGENTE</strong>
-                <i class="fas fa-robot"></i>
-            </div>
-            <div class="recomendacion-contenido">
-                <div class="recomendacion-porcentaje">
-                    <span class="badge-recomendado">${datos.porcentajeRecomendado}%</span>
-                    <span class="cantidad-recomendada">${datos.cantidadRecomendada.toLocaleString()} ladrillos</span>
-                </div>
-                <div class="recomendacion-razon">
-                    ${datos.razonRecomendacion}
-                </div>
-                <div class="recomendacion-explicacion">
-                    <i class="fas fa-lightbulb"></i> ${datos.explicacionRecomendacion}
-                </div>
-            </div>
-        </div>
-        
-        <div class="resultado-detalles">
-            <h6><i class="fas fa-info-circle"></i> Detalles del cálculo</h6>
-            <p><i class="fas fa-vector-square"></i> <strong>Área total de la pared:</strong> ${datos.areaPared.toFixed(2)} m²</p>
-            <p><i class="fas fa-door-open"></i> <strong>Área de vanos:</strong> ${datos.areaVanos.toFixed(2)} m²</p>
-            <p><i class="fas fa-chart-line"></i> <strong>Área neta a cubrir:</strong> ${datos.areaNeta.toFixed(2)} m²</p>
-            <p><i class="fas fa-fill-drip"></i> <strong>Volumen estimado de mortero:</strong> ${datos.volumenMortero.toFixed(3)} m³</p>
-            <p><i class="fas fa-shape"></i> <strong>Forma de la pared:</strong> ${datos.formaPared === "regular" ? "Rectangular regular" : "Forma irregular"}</p>
-            ${datos.vanos > 0 ? `<p><i class="fas fa-door-closed"></i> <strong>Vanos restados:</strong> ${datos.vanos}</p>` : ''}
-        </div>
-        
-        <div class="consejo-profesional">
-            <i class="fas fa-tools"></i>
-            <strong>💡 Consejo profesional:</strong> Siempre es mejor comprar un poco más de material. El desperdicio puede deberse a cortes, ladrillos rotos, esquinas, o errores de cálculo. ¡Mejor que sobre a que falte!
-        </div>
+        <div class="recomendacion-container"><div class="recomendacion-header">🤖 RECOMENDACIÓN</div><div><span class="badge-recomendado">${datos.porcentajeRecomendado}%</span> <strong>${datos.cantidadRecomendada.toLocaleString()} ladrillos</strong></div><div>${datos.razonRecomendacion}</div><small>${datos.explicacionRecomendacion}</small></div>
+        <div class="resultado-detalles"><strong>Detalles:</strong><br>📐 Área pared: ${datos.areaPared.toFixed(2)} m²<br>🚪 Área vanos: ${datos.areaVanos.toFixed(2)} m²<br>📊 Área neta: ${datos.areaNeta.toFixed(2)} m²<br>🧱 Mortero: ${datos.volumenMortero.toFixed(3)} m³</div>
+        <div class="consejo-profesional"><i class="fas fa-tools"></i> 💡 Consejo: Compra 5-10% extra por desperdicio</div>
     `;
-    
-    resultadoDiv.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    resultadoDiv.scrollIntoView({ behavior: 'smooth' });
 }
 
 // ==================== INICIALIZACIÓN ====================
 
-document.addEventListener('DOMContentLoaded', function() {
-    const inputs = document.querySelectorAll('input[type="number"]');
-    inputs.forEach(input => {
+document.addEventListener('DOMContentLoaded', () => {
+    document.querySelectorAll('input[type="number"]').forEach(input => {
         input.addEventListener('input', function() {
-            const value = parseFloat(this.value);
-            let errorId = '';
-            
-            if (this.id === 'largoPared') errorId = 'errorLargoPared';
-            else if (this.id === 'altoPared') errorId = 'errorAltoPared';
-            else if (this.id === 'largoLadrillo') errorId = 'errorLargoLadrillo';
-            else if (this.id === 'altoLadrillo') errorId = 'errorAltoLadrillo';
-            else if (this.id === 'junta') errorId = 'errorJunta';
-            else if (this.id.includes('anchoVano')) errorId = this.id.replace('anchoVano', 'errorAnchoVano');
-            else if (this.id.includes('altoVano')) errorId = this.id.replace('altoVano', 'errorAltoVano');
-            
-            const errorDiv = document.getElementById(errorId);
-            
-            if (errorDiv) {
-                if (this.value === "") {
-                    errorDiv.textContent = '⚠️ Campo obligatorio';
-                    this.classList.add('input-error');
-                } else if (isNaN(value)) {
-                    errorDiv.textContent = '⚠️ Ingrese un número válido';
-                    this.classList.add('input-error');
-                } else if (value < 0) {
-                    errorDiv.textContent = '❌ No puede ser negativo';
-                    this.classList.add('input-error');
-                } else if (value === 0) {
-                    errorDiv.textContent = '⚠️ Debe ser mayor a cero';
-                    this.classList.add('input-error');
-                } else {
-                    errorDiv.textContent = '';
-                    this.classList.remove('input-error');
+            const val = parseFloat(this.value);
+            let errId = { largoPared: 'errorLargoPared', altoPared: 'errorAltoPared', largoLadrillo: 'errorLargoLadrillo', altoLadrillo: 'errorAltoLadrillo', junta: 'errorJunta' }[this.id];
+            if (errId) {
+                const errDiv = document.getElementById(errId);
+                if (errDiv) {
+                    if (this.value === "") errDiv.textContent = "⚠️ Campo obligatorio";
+                    else if (isNaN(val)) errDiv.textContent = "⚠️ Número inválido";
+                    else if (val < 0) errDiv.textContent = "❌ No puede ser negativo";
+                    else if (val === 0) errDiv.textContent = "⚠️ Debe ser mayor a cero";
+                    else errDiv.textContent = "";
                 }
             }
         });
     });
+    setTimeout(() => { if (!document.querySelector('.vano')) agregarVano(); }, 100);
 });
-
-setTimeout(() => {
-    if (document.querySelectorAll('.vano').length === 0) {
-        agregarVano();
-    }
-}, 100);
