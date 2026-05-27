@@ -5,81 +5,45 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
     <title>BrickMaster | Calculadora Profesional de Ladrillos</title>
     
-    <!-- Bootstrap 5 -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
-    
-    <!-- Font Awesome Icons -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
-    
-    <!-- Google Fonts -->
     <link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,300;14..32,400;14..32,600;14..32,700;14..32,800&display=swap" rel="stylesheet">
-    
-    <!-- CSS Personalizado -->
     <link rel="stylesheet" href="style.css">
-    <link rel="shortcut icon" href="../favicon/favico/icons8-calculadora-de-manzana-96.png" type="image/x-icon">
 </head>
 <body>
-    <!-- Partícula de fondo decorativa -->
     <div class="bg-particles"></div>
     
     <div class="container mt-4 mt-md-5">
         <div class="row justify-content-center">
             <div class="col-lg-10 col-xl-9">
-                
-                <!-- Tarjeta Principal con efecto Glassmorphism -->
                 <div class="main-card">
                     
-                    <!-- Header con ícono animado -->
                     <div class="card-header-custom">
-                        <div class="icon-wrapper">
-                            <i class="fas fa-cubes"></i>
-                        </div>
-                        <h1>
-                            Brick<span>Master</span>
-                            <small>Calculadora Profesional de Ladrillos</small>
-                        </h1>
+                        <div class="icon-wrapper"><i class="fas fa-cubes"></i></div>
+                        <h1>Brick<span>Master</span><small>Calculadora Profesional de Ladrillos</small></h1>
                     </div>
                     
-                    <!-- Contenido Principal -->
                     <div class="card-body-custom">
                         
-                        <!-- Sección: Datos de la Pared -->
+                        <!-- DATOS DE LA PARED -->
                         <div class="section">
-                            <div class="section-title">
-                                <i class="fas fa-vector-square"></i>
-                                <h3>Datos de la Pared</h3>
-                                <div class="title-line"></div>
-                            </div>
+                            <div class="section-title"><i class="fas fa-vector-square"></i><h3>Datos de la Pared</h3><div class="title-line"></div></div>
                             
-                            <!-- Botón para medición con cámara -->
-                            <div class="mb-4">
-                                <button class="btn-camera" onclick="abrirCamaraMedicion()">
-                                    <i class="fas fa-camera"></i>
-                                    Medir con cámara
-                                </button>
-                                <small class="text-muted d-block mt-2">
-                                    <i class="fas fa-info-circle"></i> 
-                                    La cámara detectará automáticamente la pared. Usa "Auto-medir" para medidas automáticas o "Calibrar" para máxima precisión.
-                                </small>
-                            </div>
+                            <button class="btn-camera mb-4" onclick="abrirCamaraMedicion()">
+                                <i class="fas fa-camera"></i> 📷 Medir con cámara
+                            </button>
                             
                             <div class="row g-4">
                                 <div class="col-md-6">
                                     <div class="input-group-modern">
-                                        <label>
-                                            <i class="fas fa-arrows-left-right"></i>
-                                            Largo de la pared
-                                        </label>
+                                        <label><i class="fas fa-arrows-left-right"></i> Largo de la pared</label>
                                         <input type="number" step="any" id="largoPared" class="form-control-modern" placeholder="Ej: 5.5">
                                         <div class="error-message" id="errorLargoPared"></div>
                                     </div>
                                 </div>
                                 <div class="col-md-6">
                                     <div class="input-group-modern">
-                                        <label>
-                                            <i class="fas fa-arrows-up-down"></i>
-                                            Altura de la pared
-                                        </label>
+                                        <label><i class="fas fa-arrows-up-down"></i> Altura de la pared</label>
                                         <input type="number" step="any" id="altoPared" class="form-control-modern" placeholder="Ej: 2.4">
                                         <div class="error-message" id="errorAltoPared"></div>
                                     </div>
@@ -88,10 +52,7 @@
                             
                             <div class="mt-4">
                                 <div class="input-group-modern">
-                                    <label>
-                                        <i class="fas fa-ruler-combined"></i>
-                                        Unidad de medida de la pared
-                                    </label>
+                                    <label><i class="fas fa-ruler-combined"></i> Unidad de medida de la pared</label>
                                     <select id="unidadPared" class="form-select-modern">
                                         <option value="m">📏 Metros (m)</option>
                                         <option value="cm">📐 Centímetros (cm)</option>
@@ -101,67 +62,39 @@
                             </div>
                         </div>
                         
-                        <!-- Separador Decorativo -->
-                        <div class="divider">
-                            <span><i class="fas fa-grip-lines-vertical"></i></span>
-                        </div>
+                        <div class="divider"><span><i class="fas fa-grip-lines-vertical"></i></span></div>
                         
-                        <!-- Sección: Puertas y Ventanas -->
+                        <!-- PUERTAS Y VENTANAS -->
                         <div class="section">
-                            <div class="section-title">
-                                <i class="fas fa-door-open"></i>
-                                <h3>Puertas y Ventanas</h3>
-                                <div class="title-line"></div>
-                            </div>
-                            
+                            <div class="section-title"><i class="fas fa-door-open"></i><h3>Puertas y Ventanas</h3><div class="title-line"></div></div>
                             <div id="vanosContainer" class="vanos-container"></div>
-                            
-                            <button class="btn-add-vano" onclick="agregarVano()">
-                                <i class="fas fa-plus-circle"></i>
-                                Agregar vano
-                            </button>
+                            <button class="btn-add-vano" onclick="agregarVano()"><i class="fas fa-plus-circle"></i> Agregar vano</button>
                         </div>
                         
-                        <!-- Separador Decorativo -->
-                        <div class="divider">
-                            <span><i class="fas fa-grip-lines-vertical"></i></span>
-                        </div>
+                        <div class="divider"><span><i class="fas fa-grip-lines-vertical"></i></span></div>
                         
-                        <!-- Sección: Datos del Ladrillo -->
+                        <!-- DATOS DEL LADRILLO -->
                         <div class="section">
-                            <div class="section-title">
-                                <i class="fas fa-cube"></i>
-                                <h3>Datos del Ladrillo</h3>
-                                <div class="title-line"></div>
-                            </div>
+                            <div class="section-title"><i class="fas fa-cube"></i><h3>Datos del Ladrillo</h3><div class="title-line"></div></div>
                             
                             <div class="row g-4">
                                 <div class="col-md-4">
                                     <div class="input-group-modern">
-                                        <label>
-                                            <i class="fas fa-arrow-left"></i>
-                                            Largo del ladrillo
-                                        </label>
+                                        <label><i class="fas fa-arrow-left"></i> Largo del ladrillo</label>
                                         <input type="number" step="any" id="largoLadrillo" class="form-control-modern" placeholder="Ej: 24">
                                         <div class="error-message" id="errorLargoLadrillo"></div>
                                     </div>
                                 </div>
                                 <div class="col-md-4">
                                     <div class="input-group-modern">
-                                        <label>
-                                            <i class="fas fa-arrow-up"></i>
-                                            Alto del ladrillo
-                                        </label>
+                                        <label><i class="fas fa-arrow-up"></i> Alto del ladrillo</label>
                                         <input type="number" step="any" id="altoLadrillo" class="form-control-modern" placeholder="Ej: 11.5">
                                         <div class="error-message" id="errorAltoLadrillo"></div>
                                     </div>
                                 </div>
                                 <div class="col-md-4">
                                     <div class="input-group-modern">
-                                        <label>
-                                            <i class="fas fa-border-all"></i>
-                                            Junta
-                                        </label>
+                                        <label><i class="fas fa-border-all"></i> Junta</label>
                                         <input type="number" step="any" id="junta" class="form-control-modern" placeholder="Ej: 10">
                                         <div class="error-message" id="errorJunta"></div>
                                     </div>
@@ -171,10 +104,7 @@
                             <div class="row g-4 mt-2">
                                 <div class="col-md-6">
                                     <div class="input-group-modern">
-                                        <label>
-                                            <i class="fas fa-ruler"></i>
-                                            Unidad del ladrillo
-                                        </label>
+                                        <label><i class="fas fa-ruler"></i> Unidad del ladrillo</label>
                                         <select id="unidadLadrillo" class="form-select-modern">
                                             <option value="m">📏 Metros (m)</option>
                                             <option value="cm" selected>📐 Centímetros (cm)</option>
@@ -184,10 +114,7 @@
                                 </div>
                                 <div class="col-md-6">
                                     <div class="input-group-modern">
-                                        <label>
-                                            <i class="fas fa-border-all"></i>
-                                            Unidad de la junta
-                                        </label>
+                                        <label><i class="fas fa-border-all"></i> Unidad de la junta</label>
                                         <select id="unidadJunta" class="form-select-modern">
                                             <option value="mm" selected>📏 Milímetros (mm)</option>
                                             <option value="cm">📐 Centímetros (cm)</option>
@@ -199,62 +126,39 @@
                             </div>
                         </div>
                         
-                        <!-- Botón Calcular con efecto 3D -->
-                        <div class="btn-container">
-                            <button class="btn-calculate" onclick="calcular()">
-                                <span class="btn-text">
-                                    <i class="fas fa-calculator"></i>
-                                    Calcular cantidad
-                                </span>
-                                <span class="btn-icon">
-                                    <i class="fas fa-arrow-right"></i>
-                                </span>
-                            </button>
-                        </div>
+                        <button class="btn-calculate" onclick="calcular()">
+                            <span class="btn-text"><i class="fas fa-calculator"></i> Calcular cantidad</span>
+                            <span class="btn-icon"><i class="fas fa-arrow-right"></i></span>
+                        </button>
                         
-                        <!-- Resultados con diseño moderno -->
                         <div id="resultado" class="resultado-modern" style="display: none;"></div>
-                        
                     </div>
                     
-                    <!-- Footer -->
                     <div class="card-footer-custom">
-                        <p>
-                            <i class="fas fa-chart-line"></i>
-                            Cálculo profesional con precisión garantizada
-                        </p>
+                        <p><i class="fas fa-chart-line"></i> Cálculo profesional con precisión garantizada</p>
                     </div>
                 </div>
-                
             </div>
         </div>
     </div>
     
-    <!-- Modal para la cámara -->
+    <!-- MODAL CÁMARA -->
     <div class="modal fade" id="cameraModal" tabindex="-1">
         <div class="modal-dialog modal-fullscreen">
             <div class="modal-content bg-dark">
                 <div class="modal-header border-0">
-                    <h5 class="modal-title text-white">
-                        <i class="fas fa-camera"></i> Medición Inteligente
-                    </h5>
+                    <h5 class="modal-title text-white"><i class="fas fa-camera"></i> Medición Inteligente</h5>
                     <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
                 </div>
                 <div class="modal-body p-0">
                     <div class="camera-container">
                         <video id="video" autoplay playsinline></video>
                         <canvas id="canvas"></canvas>
-                        <div class="camera-overlay">
-                            <div class="grid-overlay"></div>
-                        </div>
+                        <div class="camera-overlay"><div class="grid-overlay"></div></div>
                         <div class="camera-controls">
-                            <!-- Botones de medición automática -->
                             <div class="measure-buttons">
-                                <button class="btn-measure" onclick="capturarMedida('automatico')" style="background: #10b981;">
+                                <button class="btn-measure" onclick="capturarMedida('auto')" style="background: #10b981;">
                                     <i class="fas fa-magic"></i> Auto-medir
-                                </button>
-                                <button class="btn-measure" onclick="capturarMedida('calibrar')" style="background: #f59e0b;">
-                                    <i class="fas fa-ruler-combined"></i> Calibrar
                                 </button>
                             </div>
                             <div class="measure-buttons mt-2">
@@ -269,30 +173,11 @@
                                 </button>
                             </div>
                             
-                            <!-- Información de medidas -->
                             <div class="medida-info">
-                                <div class="medida-item">
-                                    <span>📐 Ancho detectado:</span>
-                                    <strong id="medidaAncho">-- m</strong>
-                                </div>
-                                <div class="medida-item">
-                                    <span>📏 Alto detectado:</span>
-                                    <strong id="medidaAlto">-- m</strong>
-                                </div>
+                                <div class="medida-item"><span>📐 Ancho:</span><strong id="medidaAncho">-- m</strong></div>
+                                <div class="medida-item"><span>📏 Alto:</span><strong id="medidaAlto">-- m</strong></div>
                             </div>
                             
-                            <!-- Guía de uso -->
-                            <div class="referencia-info">
-                                <small>
-                                    <i class="fas fa-info-circle"></i> 
-                                    <strong>¿Cómo usar?</strong><br>
-                                    • <strong>Auto-medir:</strong> Apunta la cámara a la pared y espera a que se estabilicen las medidas<br>
-                                    • <strong>Calibrar:</strong> Usa un objeto de referencia (ej: hoja A4) para máxima precisión<br>
-                                    • <strong>Ingresar:</strong> Usa la regla virtual como referencia e ingresa el valor manualmente
-                                </small>
-                            </div>
-                            
-                            <!-- Botón aplicar medidas -->
                             <button class="btn-aplicar-medidas" onclick="aplicarMedidas()">
                                 <i class="fas fa-check-circle"></i> Aplicar medidas al cálculo
                             </button>
