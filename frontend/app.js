@@ -17,6 +17,35 @@ function normalizarDecimal(valor) {
     return isNaN(numero) ? null : numero;
 }
 
+// ==================== CONVERSIÓN DE UNIDADES (CORREGIDA) ====================
+
+function convertirAMetros(valor, unidad) {
+    let v = normalizarDecimal(valor);
+    if (v === null || isNaN(v)) return 0;
+    
+    switch (unidad) {
+        case 'm': return v;
+        case 'cm': return v / 100;
+        case 'in': return v * 0.0254;
+        case 'mm': return v / 1000;
+        default: return v;
+    }
+}
+
+// Función específica para junta
+function convertirJuntaAMetros(valor, unidad) {
+    let v = normalizarDecimal(valor);
+    if (v === null || isNaN(v)) return 0;
+    
+    switch (unidad) {
+        case 'mm': return v / 1000;
+        case 'cm': return v / 100;
+        case 'in': return v * 0.0254;
+        case 'm': return v;
+        default: return v;
+    }
+}
+
 // ==================== MEDICIÓN CON CÁMARA ====================
 
 async function abrirCamaraMedicion() {
@@ -491,23 +520,6 @@ function limpiarErrores() {
     document.querySelectorAll('.form-control-modern.input-error').forEach(el => el.classList.remove('input-error'));
 }
 
-// ==================== CONVERSIONES ====================
-
-function convertirAMetros(valor, unidad, esJunta = false) {
-    let v = normalizarDecimal(valor);
-    if (v === null || isNaN(v)) return 0;
-    
-    if (esJunta) {
-        if (unidad === 'mm') return v / 1000;
-        if (unidad === 'cm') return v / 100;
-        if (unidad === 'in') return v * 0.0254;
-        return v;
-    }
-    if (unidad === 'cm') return v / 100;
-    if (unidad === 'in') return v * 0.0254;
-    return v;
-}
-
 // ==================== VANOS ====================
 
 function agregarVano() {
@@ -545,7 +557,7 @@ function eliminarVano(id) {
     document.getElementById(`vano${id}`)?.remove(); 
 }
 
-// ==================== CÁLCULO PRINCIPAL (CORREGIDO - Cálculo local) ====================
+// ==================== CÁLCULO PRINCIPAL (CORREGIDO) ====================
 
 function calcular() {
     limpiarErrores();
@@ -557,7 +569,7 @@ function calcular() {
         return; 
     }
     
-    // Obtener valores de la pared
+    // ==================== PARED ====================
     const largoParedRaw = document.getElementById('largoPared').value;
     const altoParedRaw = document.getElementById('altoPared').value;
     const unidadPared = document.getElementById('unidadPared').value;
@@ -570,16 +582,14 @@ function calcular() {
         return;
     }
     
-    // Convertir a metros
     const largoParedM = convertirAMetros(largoPared, unidadPared);
     const altoParedM = convertirAMetros(altoPared, unidadPared);
-    
-    // Área total de la pared
     const areaPared = largoParedM * altoParedM;
     
-    // ==================== CÁLCULO DE VANOS (CORREGIDO) ====================
+    // ==================== VANOS (CORREGIDO) ====================
     let areaVanos = 0;
     let vanosInfo = [];
+    let vanosConvertidos = [];
     
     document.querySelectorAll('.vano').forEach((vano, index) => {
         const anchoInput = vano.querySelector('input[id^="anchoVano"]');
@@ -589,31 +599,38 @@ function calcular() {
         if (anchoInput && altoInput && anchoInput.value && altoInput.value) {
             const anchoRaw = anchoInput.value;
             const altoRaw = altoInput.value;
-            const unidadVano = unidadSelect ? unidadSelect.value : 'm';
+            const unidadVano = unidadSelect ? unidadSelect.value : 'cm';
             
             const ancho = normalizarDecimal(anchoRaw);
             const alto = normalizarDecimal(altoRaw);
             
             if (ancho !== null && alto !== null && ancho > 0 && alto > 0) {
+                // CONVERSIÓN CORRECTA a metros
                 const anchoM = convertirAMetros(ancho, unidadVano);
                 const altoM = convertirAMetros(alto, unidadVano);
                 const areaVano = anchoM * altoM;
+                
                 areaVanos += areaVano;
                 
                 vanosInfo.push({
                     ancho: ancho,
                     alto: alto,
                     unidad: unidadVano,
-                    areaM2: areaVano.toFixed(2)
+                    anchoM: anchoM.toFixed(4),
+                    altoM: altoM.toFixed(4),
+                    areaM2: areaVano.toFixed(4)
+                });
+                
+                vanosConvertidos.push({
+                    ancho: anchoM,
+                    alto: altoM,
+                    unidad: 'm'
                 });
             }
         }
     });
     
-    // Área neta
-    const areaNeta = Math.max(0, areaPared - areaVanos);
-    
-    // Datos del ladrillo
+    // ==================== LADRILLO ====================
     const largoLadrilloRaw = document.getElementById('largoLadrillo').value;
     const altoLadrilloRaw = document.getElementById('altoLadrillo').value;
     const juntaRaw = document.getElementById('junta').value;
@@ -629,12 +646,10 @@ function calcular() {
         return;
     }
     
-    // Convertir a metros
     const L = convertirAMetros(largoLadrillo, unidadLadrillo);
     const H = convertirAMetros(altoLadrillo, unidadLadrillo);
-    const J = convertirAMetros(junta || 0, unidadJunta, true);
+    const J = convertirJuntaAMetros(junta || 0, unidadJunta);
     
-    // Área de cada ladrillo con junta
     const areaLadrilloConJunta = (L + J) * (H + J);
     
     if (areaLadrilloConJunta <= 0) {
@@ -642,11 +657,14 @@ function calcular() {
         return;
     }
     
-    // Cantidad de ladrillos
+    // ==================== CÁLCULOS FINALES ====================
+    const areaNeta = Math.max(0, areaPared - areaVanos);
     const cantidadBase = Math.ceil(areaNeta / areaLadrilloConJunta);
     const cantidad5 = Math.ceil(cantidadBase * 1.05);
     const cantidad10 = Math.ceil(cantidadBase * 1.10);
     const cantidad15 = Math.ceil(cantidadBase * 1.15);
+    const volumenMortero = areaNeta * 0.02;
+    const ladrillosPorM2 = (1 / areaLadrilloConJunta).toFixed(2);
     
     // Recomendación de margen
     let margenRecomendado = 5;
@@ -656,10 +674,7 @@ function calcular() {
     
     const cantidadRecomendada = margenRecomendado === 5 ? cantidad5 : cantidad10;
     
-    // Volumen de mortero estimado
-    const volumenMortero = areaNeta * 0.02;
-    
-    // Mostrar resultados
+    // ==================== MOSTRAR RESULTADOS ====================
     resultadoDiv.style.display = 'block';
     resultadoDiv.innerHTML = `
         <div style="margin-bottom: 20px;">
@@ -702,11 +717,12 @@ function calcular() {
         <div style="background: white; border-radius: 16px; padding: 15px; margin: 15px 0;">
             <h6 style="margin-bottom: 10px;"><i class="fas fa-info-circle"></i> Detalles del cálculo</h6>
             <p><i class="fas fa-vector-square"></i> <strong>Área total de la pared:</strong> ${areaPared.toFixed(2)} m²</p>
-            <p><i class="fas fa-door-open"></i> <strong>Área de vanos:</strong> ${areaVanos.toFixed(2)} m²</p>
-            ${vanosInfo.length > 0 ? `<p><i class="fas fa-door-closed"></i> <strong>Vanos restados:</strong> ${vanosInfo.length} (${vanosInfo.map(v => `${v.ancho}×${v.alto} ${v.unidad}`).join(', ')})</p>` : '<p><i class="fas fa-door-closed"></i> <strong>Vanos restados:</strong> 0</p>'}
+            <p><i class="fas fa-door-open"></i> <strong>Área de vanos:</strong> ${areaVanos.toFixed(4)} m²</p>
+            ${vanosInfo.length > 0 ? `<p><i class="fas fa-door-closed"></i> <strong>Vanos restados:</strong> ${vanosInfo.length} (${vanosInfo.map(v => `${v.ancho}×${v.alto} ${v.unidad} = ${v.areaM2} m²`).join(', ')})</p>` : '<p><i class="fas fa-door-closed"></i> <strong>Vanos restados:</strong> 0</p>'}
             <p><i class="fas fa-chart-line"></i> <strong>Área neta a cubrir:</strong> ${areaNeta.toFixed(2)} m²</p>
             <p><i class="fas fa-fill-drip"></i> <strong>Volumen estimado de mortero:</strong> ${volumenMortero.toFixed(3)} m³</p>
-            <p><i class="fas fa-chart-simple"></i> <strong>Ladrillos por m²:</strong> ${(1 / areaLadrilloConJunta).toFixed(2)}</p>
+            <p><i class="fas fa-chart-simple"></i> <strong>Ladrillos por m²:</strong> ${ladrillosPorM2}</p>
+            <p><i class="fas fa-cube"></i> <strong>Tamaño ladrillo + junta:</strong> ${((L+J)*100).toFixed(1)} cm × ${((H+J)*100).toFixed(1)} cm</p>
         </div>
         
         <!-- Consejo profesional -->
