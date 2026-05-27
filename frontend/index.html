@@ -25,26 +25,25 @@
                     
                     <div class="card-body-custom">
                         
-                        <!-- DATOS DE LA PARED -->
                         <div class="section">
                             <div class="section-title"><i class="fas fa-vector-square"></i><h3>Datos de la Pared</h3><div class="title-line"></div></div>
                             
                             <button class="btn-camera mb-4" onclick="abrirCamaraMedicion()">
-                                <i class="fas fa-camera"></i> Medir con cámara
+                                <i class="fas fa-camera"></i> 📷 Medir con cámara
                             </button>
                             
                             <div class="row g-4">
                                 <div class="col-md-6">
                                     <div class="input-group-modern">
                                         <label><i class="fas fa-arrows-left-right"></i> Largo de la pared</label>
-                                        <input type="number" step="any" id="largoPared" class="form-control-modern" placeholder="Ej: 5.5">
+                                        <input type="text" id="largoPared" class="form-control-modern" placeholder="Ej: 5.5 o 5,5">
                                         <div class="error-message" id="errorLargoPared"></div>
                                     </div>
                                 </div>
                                 <div class="col-md-6">
                                     <div class="input-group-modern">
                                         <label><i class="fas fa-arrows-up-down"></i> Altura de la pared</label>
-                                        <input type="number" step="any" id="altoPared" class="form-control-modern" placeholder="Ej: 2.4">
+                                        <input type="text" id="altoPared" class="form-control-modern" placeholder="Ej: 2.4 o 2,4">
                                         <div class="error-message" id="errorAltoPared"></div>
                                     </div>
                                 </div>
@@ -52,7 +51,7 @@
                             
                             <div class="mt-4">
                                 <div class="input-group-modern">
-                                    <label><i class="fas fa-ruler-combined"></i> Unidad de medida de la pared</label>
+                                    <label><i class="fas fa-ruler-combined"></i> Unidad de medida</label>
                                     <select id="unidadPared" class="form-select-modern">
                                         <option value="m">📏 Metros (m)</option>
                                         <option value="cm">📐 Centímetros (cm)</option>
@@ -64,7 +63,6 @@
                         
                         <div class="divider"><span><i class="fas fa-grip-lines-vertical"></i></span></div>
                         
-                        <!-- PUERTAS Y VENTANAS -->
                         <div class="section">
                             <div class="section-title"><i class="fas fa-door-open"></i><h3>Puertas y Ventanas</h3><div class="title-line"></div></div>
                             <div id="vanosContainer" class="vanos-container"></div>
@@ -73,7 +71,6 @@
                         
                         <div class="divider"><span><i class="fas fa-grip-lines-vertical"></i></span></div>
                         
-                        <!-- DATOS DEL LADRILLO -->
                         <div class="section">
                             <div class="section-title"><i class="fas fa-cube"></i><h3>Datos del Ladrillo</h3><div class="title-line"></div></div>
                             
@@ -81,21 +78,21 @@
                                 <div class="col-md-4">
                                     <div class="input-group-modern">
                                         <label><i class="fas fa-arrow-left"></i> Largo del ladrillo</label>
-                                        <input type="number" step="any" id="largoLadrillo" class="form-control-modern" placeholder="Ej: 24">
+                                        <input type="text" id="largoLadrillo" class="form-control-modern" placeholder="Ej: 24 o 24,0">
                                         <div class="error-message" id="errorLargoLadrillo"></div>
                                     </div>
                                 </div>
                                 <div class="col-md-4">
                                     <div class="input-group-modern">
                                         <label><i class="fas fa-arrow-up"></i> Alto del ladrillo</label>
-                                        <input type="number" step="any" id="altoLadrillo" class="form-control-modern" placeholder="Ej: 11.5">
+                                        <input type="text" id="altoLadrillo" class="form-control-modern" placeholder="Ej: 11.5 o 11,5">
                                         <div class="error-message" id="errorAltoLadrillo"></div>
                                     </div>
                                 </div>
                                 <div class="col-md-4">
                                     <div class="input-group-modern">
                                         <label><i class="fas fa-border-all"></i> Junta</label>
-                                        <input type="number" step="any" id="junta" class="form-control-modern" placeholder="Ej: 10">
+                                        <input type="text" id="junta" class="form-control-modern" placeholder="Ej: 10 o 10,0">
                                         <div class="error-message" id="errorJunta"></div>
                                     </div>
                                 </div>
@@ -160,6 +157,9 @@
                                 <button class="btn-measure" onclick="capturarMedida('auto')" style="background: #10b981;">
                                     <i class="fas fa-magic"></i> Auto-medir
                                 </button>
+                                <button class="btn-measure" onclick="capturarMedida('calibrar')" style="background: #f59e0b;">
+                                    <i class="fas fa-ruler-combined"></i> Calibrar
+                                </button>
                             </div>
                             <div class="measure-buttons mt-2">
                                 <button class="btn-measure" onclick="capturarMedida('ancho')">
@@ -174,8 +174,15 @@
                             </div>
                             
                             <div class="medida-info">
-                                <div class="medida-item"><span>📐 Ancho:</span><strong id="medidaAncho">-- m</strong></div>
-                                <div class="medida-item"><span>📏 Alto:</span><strong id="medidaAlto">-- m</strong></div>
+                                <div class="medida-item"><span>📐 Ancho detectado:</span><strong id="medidaAncho">-- m</strong></div>
+                                <div class="medida-item"><span>📏 Alto detectado:</span><strong id="medidaAlto">-- m</strong></div>
+                            </div>
+                            
+                            <div class="referencia-info">
+                                <small><i class="fas fa-info-circle"></i> <strong>¿Cómo usar?</strong><br>
+                                • <strong>Auto-medir:</strong> Apunta a la pared, espera a que se estabilicen las medidas<br>
+                                • <strong>Calibrar:</strong> Usa un objeto de referencia (ej: hoja A4) para máxima precisión<br>
+                                • <strong>Ingresar:</strong> Usa la regla virtual como referencia</small>
                             </div>
                             
                             <button class="btn-aplicar-medidas" onclick="aplicarMedidas()">
